@@ -4,6 +4,7 @@ project(hotaru LANGUAGES CXX)
 
 option(BUILD_TEST ON)
 option(ENABLE_ASAN OFF)
+option(ENABLE_PROFILE ON)
 
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.12")
     cmake_policy(SET CMP0074 NEW)
