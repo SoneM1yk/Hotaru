@@ -5,7 +5,7 @@
 #include "result.h"
 
 #include <memory>
-#include <volk/volk.h>
+#include <volk.h>
 
 namespace hotaru {
 

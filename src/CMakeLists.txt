@@ -18,6 +18,7 @@ find_package(spdlog REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(volk REQUIRED) 
 find_package(EnTT REQUIRED)
+find_package(Eigen3 CONFIG REQUIRED)
 
 target_include_directories(${PROJECT_NAME} 
     PUBLIC ${HOTARU_PUBLIC_HEADERS_DIR}
@@ -29,6 +30,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Vulkan::Vulkan
     volk::volk
     EnTT::EnTT
+    Eigen3::Eigen
 )
 
 # Compile Definitions

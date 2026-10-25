@@ -14,7 +14,7 @@
 #include <vector>
 
 #include <spdlog/spdlog.h>
-#include <volk/volk.h>
+#include <volk.h>
 #include <vulkan/vulkan_core.h>
 
 namespace hotaru
