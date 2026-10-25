@@ -2,18 +2,19 @@
 
 #include "backend/swapchain.h"
 #include "backend/command_list.h"
+#include "backend/vulkan/vulkan_swapchain.h"
 #include "hotaru/config.h"
 #include "result.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include <vulkan/vulkan.h>
-
 #include <spdlog/spdlog.h>
+#include <volk/volk.h>
 #include <vulkan/vulkan_core.h>
 
 namespace hotaru
@@ -146,7 +147,7 @@ struct VulkanDriver::Impl
 {
     explicit Impl(const DriverConfig& driver_config)
     {
-        
+        surface_type = driver_config.surface_type;
     }
 
     ~Impl()
@@ -156,6 +157,8 @@ struct VulkanDriver::Impl
 
     void Destroy() noexcept
     {
+        swapchain.reset();
+
         if (device != VK_NULL_HANDLE) {
             vkDestroyDevice(device, nullptr);
             device = VK_NULL_HANDLE;
@@ -203,10 +206,13 @@ struct VulkanDriver::Impl
     VkQueue graphics_queue = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger = VK_NULL_HANDLE;
     uint32_t graphics_queue_family = VK_QUEUE_FAMILY_IGNORED;
+    uint32_t present_queue_family = VK_QUEUE_FAMILY_IGNORED;
     uint32_t api_version = VK_API_VERSION_1_0;
     std::vector<QueueInfo> queues;
     bool validation_enabled = false;
     bool debug_utils_enabled = false;
+
+    std::unique_ptr<VulkanSwapchain> swapchain;
 };
 
 VulkanDriver::VulkanDriver(const DriverConfig& config)
@@ -217,10 +223,17 @@ VulkanDriver::~VulkanDriver() = default;
 
 Result VulkanDriver::Init()
 {
+    if (volkInitialize() != VK_SUCCESS) {
+        return Result::Failure(ResultType::InitializationFailed, 
+            "Volk Loader Failed!");
+    }
+
     const Result result = CreateInstance()
+        .AndThen([this] { volkLoadInstance(impl_->instance); return Result::Ok(); })
         .AndThen([this] { return SetupDebugMessenger(); })
         .AndThen([this] { return PickPhysicalDevice(); })
-        .AndThen([this] { return CreateLogicalDevice(); });
+        .AndThen([this] { return CreateLogicalDevice(); })
+        .AndThen([this] { volkLoadDevice(impl_->device); return Result::Ok(); });
     if (!result) {
         impl_->Destroy();
         return result;
@@ -293,33 +306,32 @@ Result VulkanDriver::CreateInstance()
         return result;
     }
 
+#ifndef NDEBUG
     // Validation Layer
-#ifdef ENABLE_PROFILE
-        uint32_t layer_count = 0;
-        vk_result = vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+    uint32_t layer_count = 0;
+    vk_result = vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+    if (vk_result != VK_SUCCESS) {
+        return Result::Failure(
+            ResultType::InitializationFailed,
+            "Failed to enumerate Vulkan instance layers");
+    }
+
+    std::vector<VkLayerProperties> available_layers(layer_count);
+    if (layer_count > 0) {
+        vk_result = vkEnumerateInstanceLayerProperties(
+            &layer_count, available_layers.data());
         if (vk_result != VK_SUCCESS) {
             return Result::Failure(
                 ResultType::InitializationFailed,
-                "Failed to enumerate Vulkan instance layers");
+                "Failed to query Vulkan instance layers");
         }
+    }
 
-        std::vector<VkLayerProperties> available_layers(layer_count);
-        if (layer_count > 0) {
-            vk_result = vkEnumerateInstanceLayerProperties(
-                &layer_count, available_layers.data());
-            if (vk_result != VK_SUCCESS) {
-                return Result::Failure(
-                    ResultType::InitializationFailed,
-                    "Failed to query Vulkan instance layers");
-            }
-        }
-
-        impl_->validation_enabled =
-            HasInstanceLayer(available_layers, kValidationLayerName);
-        if (!impl_->validation_enabled) {
-            SPDLOG_WARN("Vulkan validation layer is unavailable; continuing "
-                        "without validation");
-        }
+    impl_->validation_enabled =
+        HasInstanceLayer(available_layers, kValidationLayerName);
+    if (!impl_->validation_enabled) {
+        SPDLOG_WARN("Vulkan validation layer is unavailable; continuing "
+                    "without validation");
     }
 #endif
 
@@ -640,7 +652,99 @@ CommandList* VulkanDriver::CreateCommandList()
 
 Swapchain* VulkanDriver::CreateSwapchain(const NativeSurfaceDesc& desc) 
 {
+    impl_->swapchain = 
+        std::make_unique<VulkanSwapchain>(
+            desc, impl_->instance, impl_->device);
+    
+    // Surface Format 
+    uint32_t format_count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(
+        impl_->physical_device, impl_->swapchain->Surface(), 
+        &format_count, nullptr);
+    
+    std::vector<VkSurfaceFormatKHR> available_formats;
+    if (format_count != 0) {
+        available_formats.resize(format_count);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(
+            impl_->physical_device, impl_->swapchain->Surface(), 
+            &format_count, available_formats.data());        
+    }
 
+    auto choose_surface_format = 
+        [](const std::vector<VkSurfaceFormatKHR> &available_formats) {
+        if (available_formats.size() == 1 && 
+            available_formats[0].format == VK_FORMAT_UNDEFINED) {
+            return VkSurfaceFormatKHR{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+        }
+
+        for (const auto& available_format : available_formats) {
+            if (available_format.format == VK_FORMAT_B8G8R8A8_UNORM && 
+                available_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR){
+                return available_format;
+            }
+        }
+
+        return available_formats[0];
+    };
+
+
+    // Present Mode
+    uint32_t present_mode_count = 0;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        impl_->physical_device, impl_->swapchain->Surface(),
+        &present_mode_count, nullptr);
+    
+    std::vector<VkPresentModeKHR> available_present_modes;
+    if (present_mode_count != 0) {
+        available_present_modes.resize(present_mode_count);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(
+            impl_->physical_device, impl_->swapchain->Surface(),
+            &present_mode_count, available_present_modes.data());        
+    }
+ 
+    auto choose_present_mode = 
+        [](const std::vector<VkPresentModeKHR> available_present_modes) {
+        VkPresentModeKHR best_mode = VK_PRESENT_MODE_FIFO_KHR;
+
+        for (const auto& available_present_mode : available_present_modes) {
+            if (available_present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
+            {
+                return available_present_mode;
+            } else if (available_present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+                best_mode = available_present_mode;
+            }
+        }
+
+        return best_mode;
+    };
+    
+    // Surface Capabilities
+    VkSurfaceCapabilitiesKHR capabilities;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        impl_->physical_device, impl_->swapchain->Surface(), &capabilities);
+
+    // Queue
+    VkBool32 present_support = VK_FALSE;
+    for (const auto& queue_info : impl_->queues) {
+        if (vkGetPhysicalDeviceSurfaceSupportKHR(
+            impl_->physical_device, queue_info.family_index, 
+            impl_->swapchain->Surface(), &present_support); 
+            present_support == VK_TRUE) {
+            
+            impl_->present_queue_family = queue_info.family_index;
+            break;        
+        }
+    }
+
+    if (!impl_->swapchain->Init(
+            capabilities,
+            choose_surface_format(available_formats),
+            choose_present_mode(available_present_modes))) {
+        impl_->swapchain.reset();
+        return nullptr;
+    }
+
+    return impl_->swapchain.get();
 }
 
 

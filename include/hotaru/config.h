@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <variant>
+
 namespace hotaru {
 
 enum class RenderBackend
@@ -14,16 +17,21 @@ enum class SurfaceType
     WIN32,
 };
 
+struct Extent 
+{
+    uint32_t width;
+    uint32_t height;
+};
+
 struct WaylandSurfaceDesc
 {
+    Extent extent;
     void* surface;
     void* display;
 };
 
-union NativeSurfaceDesc
-{
-    WaylandSurfaceDesc wayland;
-};
+using NativeSurfaceDesc = std::variant<
+    WaylandSurfaceDesc>;
 
 struct AppConfig 
 {

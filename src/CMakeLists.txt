@@ -16,6 +16,7 @@ add_library(${PROJECT_NAME}
 
 find_package(spdlog REQUIRED)
 find_package(Vulkan REQUIRED)
+find_package(volk REQUIRED) 
 find_package(EnTT REQUIRED)
 
 target_include_directories(${PROJECT_NAME} 
@@ -26,6 +27,7 @@ target_include_directories(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} PRIVATE
     spdlog::spdlog
     Vulkan::Vulkan
+    volk::volk
     EnTT::EnTT
 )
 

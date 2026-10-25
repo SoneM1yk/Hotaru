@@ -1,5 +1,7 @@
 #pragma once
 
+#include <hotaru/config.h>
+
 namespace hotaru {
 
 class Camera;
@@ -7,8 +9,8 @@ class Camera;
 class View 
 {
 public:
-    Camera* GetCamera() const;
-
+    virtual Camera* GetCamera() const = 0;
+    virtual void Resize(const Extent& ext) = 0;
 };
 
 }

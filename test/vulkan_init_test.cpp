@@ -3,6 +3,12 @@
 
 #include <gtest/gtest.h>
 
+#define GLFW_INCLUDE_NONE
+#define GLFW_EXPOSE_NATIVE_WAYLAND
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
+
 #include <memory>
 
 TEST(VulkanInitTest, HeadlessInitializesDriver)
@@ -29,4 +35,41 @@ TEST(VulkanInitTest, MissingPlatformSurfaceExtensionFailsClearly)
     }
 
     EXPECT_EQ(engine, nullptr);
+}
+
+TEST(VulkanInitTest, CreateSwapchain)
+{
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+    if (!glfwInit()) {
+        FAIL();
+    }
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+    GLFWwindow* window = glfwCreateWindow(
+        800, 600, "GLFW Wayland Test", nullptr, nullptr);
+    ASSERT_NE(window, nullptr);
+
+    {
+        hotaru::AppConfig config;
+        config.backend = hotaru::RenderBackend::VULKAN;
+        config.surface_type = hotaru::SurfaceType::WAYLAND;
+        auto engine = hotaru::Engine::Create(config);
+        ASSERT_NE(engine, nullptr);
+
+        hotaru::NativeSurfaceDesc desc = hotaru::WaylandSurfaceDesc{
+            .extent = {
+                .width = 800,
+                .height = 600,
+            },
+            .surface = glfwGetWaylandWindow(window),
+            .display = glfwGetWaylandDisplay(),
+        };
+        hotaru::View* view = engine->CreateView(desc);
+
+        EXPECT_NE(view, nullptr);
+    }
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
 }

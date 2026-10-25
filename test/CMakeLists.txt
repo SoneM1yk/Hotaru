@@ -9,5 +9,5 @@ target_link_libraries(triangle_test PRIVATE ${PROJECT_NAME} GTest::gtest_main gl
 gtest_discover_tests(triangle_test)
 
 add_executable(vulkan_init_test vulkan_init_test.cpp)
-target_link_libraries(vulkan_init_test PRIVATE ${PROJECT_NAME} GTest::gtest_main)
+target_link_libraries(vulkan_init_test PRIVATE ${PROJECT_NAME} GTest::gtest_main glfw)
 gtest_discover_tests(vulkan_init_test)
