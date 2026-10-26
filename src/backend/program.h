@@ -1,19 +1,27 @@
-#pragma once 
+#pragma once
 
 #include <cstdint>
+#include <span>
+
 namespace hotaru {
 
-enum class ShaderStage{
+enum class ShaderStage
+{
     VERTEX = 0,
     FRAGMENT = 1,
     COMPUTE = 2
 };
-    
-class Program 
+
+struct ShaderBinary
 {
-public:
-    virtual void SetShader(ShaderStage stage, 
-        const uint8_t* data, uint32_t length) = 0;
+    ShaderStage stage = ShaderStage::VERTEX;
+    std::span<const uint8_t> code;
 };
 
-}
+class Program
+{
+public:
+    virtual ~Program() = default;
+};
+
+} // namespace hotaru

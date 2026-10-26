@@ -2,40 +2,44 @@
 
 #include "backend/swapchain.h"
 #include "hotaru/config.h"
-#include "result.h"
+#include <hotaru/result.h>
 
 #include <memory>
 #include <volk.h>
 
 namespace hotaru {
 
-class VulkanSwapchain : public Swapchain 
+class VulkanContext;
+
+class VulkanSwapchain final : public Swapchain
 {
 public:
-    VulkanSwapchain(
-        const NativeSurfaceDesc& desc,
-        VkInstance instance,
-        VkDevice device);
-        
-    virtual ~VulkanSwapchain();
+    static Result<std::unique_ptr<Swapchain>> Create(
+        std::shared_ptr<VulkanContext> context,
+        const NativeSurfaceDesc& desc);
 
-    Result Init(
-        VkSurfaceCapabilitiesKHR capabilities,
-        VkSurfaceFormatKHR format,
-        VkPresentModeKHR present_mode);
+    ~VulkanSwapchain() override;
 
-    VkSurfaceKHR Surface() const;
-    Result SetSurfaceFormat(VkSurfaceFormatKHR format);
-    Result SetPresentMode();
+    VulkanSwapchain(const VulkanSwapchain&) = delete;
+    VulkanSwapchain& operator=(const VulkanSwapchain&) = delete;
+    VulkanSwapchain(VulkanSwapchain&&) = delete;
+    VulkanSwapchain& operator=(VulkanSwapchain&&) = delete;
 
-    Result Resize(const Extent& extent) override;
+    Status Resize(const Extent& extent) override;
 
 private:
-    void InitSurface();
-    Result GenerateImageViews();
+    VulkanSwapchain(
+        std::shared_ptr<VulkanContext> context,
+        const NativeSurfaceDesc& desc);
+
+    Status Init();
+    Status CreateSurface();
+    Status GenerateImageViews();
+    Status PickSurfaceFormat();
+    Status PickPresentMode();
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
 
-}
+} // namespace hotaru

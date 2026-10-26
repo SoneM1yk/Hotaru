@@ -1,29 +1,29 @@
 #include "driver.h"
+#include "vulkan/vulkan_context.h"
 #include "vulkan/vulkan_driver.h"
 
+#include <hotaru/result.h>
+
 #include <memory>
-#include <spdlog/spdlog.h>
+#include <utility>
 
 namespace hotaru {
 
-std::unique_ptr<Driver> Driver::Create(const DriverConfig& config)
+Result<std::unique_ptr<Driver>> Driver::Create(const DriverConfig& config)
 {
     switch (config.backend) {
-        case RenderBackend::VULKAN:
-        {
-            auto vulkan_driver = std::make_unique<VulkanDriver>(config);
-            Result result = vulkan_driver->Init();
-            if (!result) {
-                SPDLOG_ERROR("Failed to initialize Vulkan backend: {}",
-                             result.Message());
-                return nullptr;
+        case RenderBackend::VULKAN: {
+            auto context = VulkanContext::Create(config.surface_type);
+            if (!context) {
+                return std::unexpected(std::move(context.error()));
             }
-            return vulkan_driver;
+
+            std::unique_ptr<Driver> driver =
+                std::make_unique<VulkanDriver>(std::move(*context));
+            return driver;
         }
         default:
-            SPDLOG_ERROR("Unknown render backend: {}",
-                         static_cast<int>(config.backend));
-            return nullptr;
+            return Failure(ErrorCode::Unsupported, "Unknown render backend");
     }
 }
 
