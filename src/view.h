@@ -1,6 +1,7 @@
 #pragma once
 
 #include <hotaru/config.h>
+#include <hotaru/result.h>
 #include <hotaru/view.h>
 #include <hotaru/camera.h>
 #include <memory>
@@ -12,11 +13,11 @@ class Swapchain;
 class ViewImpl : public View
 {
 public:
-    ViewImpl(Swapchain* swapchain);
-    virtual ~ViewImpl();
+    explicit ViewImpl(std::unique_ptr<Swapchain> swapchain);
+    ~ViewImpl() override;
 
     Camera* GetCamera() const override;
-    void Resize(const Extent& ext) override;
+    Status Resize(const Extent& ext) override;
 
 private:
     struct Impl;
