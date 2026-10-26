@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.21)
 
 project(hotaru LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 option(BUILD_TEST ON)
 option(ENABLE_ASAN OFF)
 option(ENABLE_PROFILE ON)
@@ -11,6 +15,8 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.12")
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+add_subdirectory(shaders)
 
 if(ENABLE_ASAN)
     message(STATUS "AddressSanitizer enabled")

@@ -6,13 +6,13 @@
 
 namespace hotaru {
 
-class CommandList;
-class Swapchain;
+class VulkanContext;
+class Frame;
 
 class VulkanDriver final : public Driver
 {
 public:
-    explicit VulkanDriver(const DriverConfig& config);
+    explicit VulkanDriver(std::shared_ptr<VulkanContext> context);
     ~VulkanDriver() override;
 
     VulkanDriver(const VulkanDriver&) = delete;
@@ -20,16 +20,24 @@ public:
     VulkanDriver(VulkanDriver&&) = delete;
     VulkanDriver& operator=(VulkanDriver&&) = delete;
 
-    Result Init() override;
+    Result<std::unique_ptr<Swapchain>>
+    CreateSwapchain(const NativeSurfaceDesc& desc) override;
 
-    CommandList* CreateCommandList() override;
-    Swapchain* CreateSwapchain(const NativeSurfaceDesc& desc) override;
+    Result<std::unique_ptr<Program>>
+    CreateProgram() override;
+
+    Result<std::unique_ptr<Pipeline>>
+    CreatePipeline(const PipelineDesc& desc) override;
+
+    Result<std::unique_ptr<CommandList>> 
+    CreateCommandList() override;
+
+    Status Submit(CommandList* command_list) override;
+    Status Submit(CommandList* command_list, Frame& frame) override;
+    Status WaitIdle() override;
 
 private:
-    Result CreateInstance();
-    Result SetupDebugMessenger();
-    Result PickPhysicalDevice();
-    Result CreateLogicalDevice();
+    Status Submit(CommandList* command_list, Frame* frame);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

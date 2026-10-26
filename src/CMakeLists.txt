@@ -31,6 +31,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     volk::volk
     EnTT::EnTT
     Eigen3::Eigen
+    hotaru_shader_headers
 )
 
 # Compile Definitions

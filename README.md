@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img alt="C++20" src="https://img.shields.io/badge/C%2B%2B-20-blue">
+  <img alt="C++23" src="https://img.shields.io/badge/C%2B%2B-23-blue">
   <img alt="Vulkan" src="https://img.shields.io/badge/API-Vulkan-9b4dca">
   <img alt="CMake" src="https://img.shields.io/badge/build-CMake-064f8c">
   <img alt="Status" src="https://img.shields.io/badge/status-work%20in%20progress-f4a261">
@@ -25,7 +25,7 @@ next milestones.
 
 ## Features
 
-- Modern C++20 codebase with a clear public/private header split
+- Modern C++23 codebase with a clear public/private header split
 - Pluggable render backend through the `Driver` interface
 - Vulkan instance, validation layer, and debug messenger setup
 - Physical-device scoring and graphics queue selection
@@ -44,7 +44,7 @@ next milestones.
 
 ## Requirements
 
-- A C++20 compiler
+- A C++23 compiler
 - CMake 3.21 or newer
 - Vulkan SDK or Vulkan development headers
 - `spdlog`
