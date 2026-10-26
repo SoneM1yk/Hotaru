@@ -1,14 +1,16 @@
 #pragma once
 
+#include "command_list.h"
+#include "pipeline.h"
+#include "program.h"
+#include "swapchain.h"
+
 #include "hotaru/config.h"
-#include "result.h"
+#include <hotaru/result.h>
 
 #include <memory>
 
 namespace hotaru {
-
-class Swapchain;
-class CommandList;
 
 struct DriverConfig
 {
@@ -16,7 +18,7 @@ struct DriverConfig
     SurfaceType surface_type = SurfaceType::NONE;
 };
 
-class Driver 
+class Driver
 {
 public:
     Driver(const Driver&) = delete;
@@ -26,14 +28,22 @@ public:
 
     virtual ~Driver() = default;
 
-    static std::unique_ptr<Driver> Create(const DriverConfig& config);
+    static Result<std::unique_ptr<Driver>> Create(const DriverConfig& config);
 
-    virtual Swapchain* CreateSwapchain(const NativeSurfaceDesc& desc) = 0;
-    virtual CommandList* CreateCommandList() = 0;
+    virtual Result<std::unique_ptr<Swapchain>>
+    CreateSwapchain(const NativeSurfaceDesc& desc) = 0;
+
+    virtual Result<std::unique_ptr<Program>>
+    CreateProgram() = 0;
+
+    virtual Result<std::unique_ptr<Pipeline>>
+    CreatePipeline(const PipelineDesc& desc) = 0;
+
+    virtual Result<std::unique_ptr<CommandList>> 
+    CreateCommandList() = 0;
 
 protected:
     Driver() = default;
-    virtual Result Init() = 0;
 };
 
 } // namespace hotaru

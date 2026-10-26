@@ -2,14 +2,16 @@
 
 namespace hotaru {
 
-class Scene;
+class View;
 
 class Renderer 
 {
 public:
-    bool BeginFrame();
-    void Render(Scene* scene);
-    void EndFrame();
+    virtual ~Renderer() = default;
+
+    virtual bool BeginFrame(View* view) = 0;
+    virtual void Render() = 0;
+    virtual void EndFrame() = 0;
 
 };
 
