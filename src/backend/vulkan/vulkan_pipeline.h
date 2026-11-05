@@ -28,6 +28,7 @@ public:
     PipelineKind Kind() const noexcept override;
 
     [[nodiscard]] VkPipeline NativeHandle() const noexcept;
+    [[nodiscard]] VkPipelineLayout NativeLayout() const noexcept;
 
 private:
     VulkanPipeline(std::shared_ptr<VulkanContext> context, PipelineKind kind);

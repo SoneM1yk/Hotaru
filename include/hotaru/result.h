@@ -14,6 +14,7 @@ enum class ErrorCode
     NotReady,
     InvalidState,
     RuntimeError,
+    OutOfDate,
 };
 
 struct Error

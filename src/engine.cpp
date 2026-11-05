@@ -63,7 +63,8 @@ View* Engine::CreateView(const NativeSurfaceDesc& desc)
 
 Renderer* Engine::CreateRenderer() 
 {
-    impl_->renderer = std::make_unique<RendererImpl>();
+    impl_->renderer = std::make_unique<RendererImpl>(
+        impl_->driver.get(), ColorFormat::UNDEFINED);
 
     return impl_->renderer.get();
 }

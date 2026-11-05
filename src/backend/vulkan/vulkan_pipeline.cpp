@@ -262,4 +262,9 @@ VkPipeline VulkanPipeline::NativeHandle() const noexcept
     return impl_->pipeline;
 }
 
+VkPipelineLayout VulkanPipeline::NativeLayout() const noexcept
+{
+    return impl_->layout;
+}
+
 } // namespace hotaru

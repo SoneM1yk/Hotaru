@@ -34,4 +34,9 @@ Status ViewImpl::Resize(const Extent& ext)
     return impl_->swapchain->Resize(ext);
 }
 
+Swapchain* ViewImpl::GetSwapchain() const
+{
+    return impl_->swapchain.get();
+}
+
 } // namespace hotaru

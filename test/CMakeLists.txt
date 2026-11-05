@@ -14,41 +14,8 @@ function(hotaru_add_test target)
     gtest_discover_tests(${target})
 endfunction()
 
-# Shared shader assets for Vulkan pipeline tests.
-find_program(GLSLC_EXECUTABLE
-    NAMES glslc
-    HINTS
-        "$ENV{VULKAN_SDK}/bin"
-        "$ENV{HOME}/Lib/vulkan/bin"
-)
-
-if(GLSLC_EXECUTABLE)
-    set(HOTARU_TEST_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/shader")
-    set(HOTARU_TEST_VERTEX_SHADER
-        "${HOTARU_TEST_SHADER_DIR}/default.vert.spv")
-    set(HOTARU_TEST_FRAGMENT_SHADER
-        "${HOTARU_TEST_SHADER_DIR}/default.frag.spv")
-
-    add_custom_command(
-        OUTPUT ${HOTARU_TEST_VERTEX_SHADER} ${HOTARU_TEST_FRAGMENT_SHADER}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${HOTARU_TEST_SHADER_DIR}
-        COMMAND ${GLSLC_EXECUTABLE}
-            -o ${HOTARU_TEST_VERTEX_SHADER}
-            ${CMAKE_SOURCE_DIR}/shader/default.vert
-        COMMAND ${GLSLC_EXECUTABLE}
-            -o ${HOTARU_TEST_FRAGMENT_SHADER}
-            ${CMAKE_SOURCE_DIR}/shader/default.frag
-        DEPENDS
-            ${CMAKE_SOURCE_DIR}/shader/default.vert
-            ${CMAKE_SOURCE_DIR}/shader/default.frag
-        COMMENT "Compiling GLSL shaders for Vulkan tests"
-        VERBATIM
-    )
-
-    add_custom_target(hotaru_test_shaders
-        DEPENDS ${HOTARU_TEST_VERTEX_SHADER} ${HOTARU_TEST_FRAGMENT_SHADER}
-    )
-endif()
+# Shared shader assets, produced by the top-level build.
+set(HOTARU_TEST_SHADER_DIR "${HOTARU_SHADER_OUTPUT_DIR}")
 
 # Backend result tests.
 hotaru_add_test(backend_result_test backend_result_test.cpp)
@@ -64,9 +31,26 @@ target_link_libraries(vulkan_init_test PRIVATE
 hotaru_add_test(vulkan_pipeline_test vulkan_pipeline_test.cpp)
 target_link_libraries(vulkan_pipeline_test PRIVATE volk::volk)
 
-if(GLSLC_EXECUTABLE)
-    add_dependencies(vulkan_pipeline_test hotaru_test_shaders)
+if(TARGET hotaru_shaders)
+    add_dependencies(vulkan_pipeline_test hotaru_shaders)
     target_compile_definitions(vulkan_pipeline_test PRIVATE
         HOTARU_TEST_SHADER_DIR="${HOTARU_TEST_SHADER_DIR}"
+    )
+endif()
+
+# Windowed triangle smoke test.
+hotaru_add_test(triangle_test triangle_test.cpp)
+target_link_libraries(triangle_test PRIVATE glfw)
+if(TARGET hotaru_shaders)
+    add_dependencies(triangle_test hotaru_shaders)
+endif()
+
+# Headless triangle rendering test.
+hotaru_add_test(triangle_offscreen_test triangle_offscreen_test.cpp)
+target_link_libraries(triangle_offscreen_test PRIVATE volk::volk)
+if(TARGET hotaru_shaders)
+    add_dependencies(triangle_offscreen_test hotaru_shaders)
+    target_compile_definitions(triangle_offscreen_test PRIVATE
+        HOTARU_TEST_SHADER_DIR="${HOTARU_SHADER_OUTPUT_DIR}"
     )
 endif()

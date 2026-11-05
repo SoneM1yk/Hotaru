@@ -83,16 +83,9 @@ Status VulkanProgram::SetShader(ShaderStage stage,
             case ShaderStage::COMPUTE:
                 return VK_SHADER_STAGE_COMPUTE_BIT;
         }
+        return VK_SHADER_STAGE_VERTEX_BIT;
     };
-
-    VkPipelineShaderStageCreateInfo staget_create_info {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage = to_vkstage(stage),
-        .module = shader_module,
-        .pName = "main",
-    };
-
-
+    (void)to_vkstage;
     return {};
 }
 

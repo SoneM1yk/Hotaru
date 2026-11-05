@@ -19,6 +19,8 @@ public:
     Camera* GetCamera() const override;
     Status Resize(const Extent& ext) override;
 
+    Swapchain* GetSwapchain() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

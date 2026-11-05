@@ -4,10 +4,11 @@
 
 #include <memory>
 
+#include <volk.h>
+
 namespace hotaru {
 
 class VulkanContext;
-class Swapchain;
 
 class VulkanCommandList final : public CommandList
 {
@@ -22,10 +23,19 @@ public:
     VulkanCommandList(VulkanCommandList&&) = delete;
     VulkanCommandList& operator=(VulkanCommandList&&) = delete;
 
-    Status Begin(Swapchain* swapchain) override;
+    Status Begin() override;
     Status End() override;
+    Status BeginRendering(const RenderTarget& target) override;
+    Status EndRendering() override;
     Status BindPipeline(const Pipeline* pipeline) override;
     Status BindVertexBuffer() override;
+    Status Draw(
+        uint32_t vertex_count,
+        uint32_t instance_count = 1,
+        uint32_t first_vertex = 0,
+        uint32_t first_instance = 0) override;
+
+    [[nodiscard]] VkCommandBuffer NativeHandle() const noexcept;
 
 private:
     explicit VulkanCommandList(std::shared_ptr<VulkanContext> context);

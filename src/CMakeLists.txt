@@ -33,6 +33,19 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Eigen3::Eigen
 )
 
+if(TARGET hotaru_shaders)
+    add_dependencies(${PROJECT_NAME} hotaru_shaders)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        HOTARU_DEFAULT_VERTEX_SHADER="${HOTARU_VERTEX_SHADER}"
+        HOTARU_DEFAULT_FRAGMENT_SHADER="${HOTARU_FRAGMENT_SHADER}"
+    )
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        HOTARU_DEFAULT_VERTEX_SHADER=""
+        HOTARU_DEFAULT_FRAGMENT_SHADER=""
+    )
+endif()
+
 # Compile Definitions
 if(ENABLE_PROFILE) 
     target_compile_definitions(${PROJECT_NAME}
