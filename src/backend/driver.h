@@ -1,11 +1,6 @@
 #pragma once
 
-#include "command_list.h"
-#include "pipeline.h"
-#include "program.h"
-#include "swapchain.h"
-
-#include "hotaru/config.h"
+#include <hotaru/config.h>
 #include <hotaru/result.h>
 
 #include <memory>
@@ -13,6 +8,15 @@
 namespace hotaru {
 
 class Frame;
+class Swapchain;
+class Program;
+class CommandList;
+
+class Pipeline;
+struct PipelineDesc;
+
+class Buffer;
+struct BufferDesc;
 
 struct DriverConfig
 {
@@ -44,8 +48,12 @@ public:
     virtual Result<std::unique_ptr<CommandList>> 
     CreateCommandList() = 0;
 
+    virtual Result<std::unique_ptr<Buffer>>
+    CreateBuffer(const BufferDesc& desc) = 0;
+
     virtual Status Submit(CommandList* command_list) = 0;
-    virtual Status Submit(CommandList* command_list, Frame& frame) = 0;
+    virtual Status Submit(
+        CommandList* command_list, const Frame& frame) = 0;
     virtual Status WaitIdle() = 0;
 
 protected:

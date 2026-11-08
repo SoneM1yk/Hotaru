@@ -2,10 +2,11 @@
 
 #include "vulkan_pipeline.h"
 #include "vulkan_context.h"
-#include "vulkan_frame.h"
+#include "vulkan_swapchain.h"
 
 #include <hotaru/result.h>
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -25,7 +26,9 @@ struct VulkanCommandList::Impl
     bool recording = false;
     bool in_render_pass = false;
     bool pipeline_bound = false;
-    VulkanFrame* frame = nullptr;
+    std::optional<Frame> frame;
+    VulkanSwapchain* swapchain = nullptr;
+    VulkanSwapchain::ImageState image_state{};
     Status error;
 
     VkCommandPool command_pool = VK_NULL_HANDLE;
@@ -136,7 +139,7 @@ void VulkanCommandList::End()
 }
 
 void VulkanCommandList::BeginRenderPass(
-    Frame* frame, const RenderPassDesc& desc)
+    const Frame& frame, const RenderPassDesc& desc)
 {
     if (!impl_->recording) {
         impl_->Fail(ErrorCode::InvalidState,
@@ -149,14 +152,20 @@ void VulkanCommandList::BeginRenderPass(
         return;
     }
 
-    auto* vk_frame = dynamic_cast<VulkanFrame*>(frame);
-    if (vk_frame == nullptr) {
+    auto* swapchain = dynamic_cast<VulkanSwapchain*>(frame.swapchain);
+    if (swapchain == nullptr) {
         impl_->Fail(ErrorCode::InvalidArgument,
             "Frame belongs to a different backend!");
         return;
     }
 
-    const VkImageLayout old_layout = vk_frame->ImageLayout();
+    auto image_state = swapchain->GetImageState(frame);
+    if (!image_state) {
+        impl_->Fail(image_state.error().code, image_state.error().message);
+        return;
+    }
+
+    const VkImageLayout old_layout = image_state->layout;
     VkImageMemoryBarrier barrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = old_layout == VK_IMAGE_LAYOUT_UNDEFINED
@@ -167,7 +176,7 @@ void VulkanCommandList::BeginRenderPass(
         .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = vk_frame->Image(),
+        .image = image_state->image,
         .subresourceRange = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
@@ -183,11 +192,15 @@ void VulkanCommandList::BeginRenderPass(
             : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         0, 0, nullptr, 0, nullptr, 1, &barrier);
-    vk_frame->SetImageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    if (Status status = swapchain->SetImageLayout(
+            frame, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL); !status) {
+        impl_->Fail(status.error().code, status.error().message);
+        return;
+    }
 
     VkRenderingAttachmentInfo color_attachment {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView = vk_frame->ImageView(),
+        .imageView = image_state->view,
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp = desc.clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
                              : VK_ATTACHMENT_LOAD_OP_LOAD,
@@ -209,8 +222,8 @@ void VulkanCommandList::BeginRenderPass(
         .renderArea = {
             .offset = {0, 0},
             .extent = {
-                vk_frame->Desc().extent.width,
-                vk_frame->Desc().extent.height,
+                frame.desc.extent.width,
+                frame.desc.extent.height,
             },
         },
         .layerCount = 1,
@@ -222,29 +235,31 @@ void VulkanCommandList::BeginRenderPass(
     VkViewport viewport {
         .x = 0.0f,
         .y = 0.0f,
-        .width = static_cast<float>(vk_frame->Desc().extent.width),
-        .height = static_cast<float>(vk_frame->Desc().extent.height),
+        .width = static_cast<float>(frame.desc.extent.width),
+        .height = static_cast<float>(frame.desc.extent.height),
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
     VkRect2D scissor {
         .offset = {0, 0},
         .extent = {
-            vk_frame->Desc().extent.width,
-            vk_frame->Desc().extent.height,
+            frame.desc.extent.width,
+            frame.desc.extent.height,
         },
     };
     vkCmdSetViewport(impl_->command_buffer, 0, 1, &viewport);
     vkCmdSetScissor(impl_->command_buffer, 0, 1, &scissor);
 
-    impl_->frame = vk_frame;
+    impl_->frame = frame;
+    impl_->swapchain = swapchain;
+    impl_->image_state = *image_state;
     impl_->in_render_pass = true;
     impl_->pipeline_bound = false;
 }
 
 void VulkanCommandList::EndRenderPass()
 {
-    if (!impl_->in_render_pass || impl_->frame == nullptr) {
+    if (!impl_->in_render_pass || !impl_->frame.has_value()) {
         impl_->Fail(ErrorCode::InvalidState,
             "No render pass is active!");
         return;
@@ -260,7 +275,7 @@ void VulkanCommandList::EndRenderPass()
         .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = impl_->frame->Image(),
+        .image = impl_->image_state.image,
         .subresourceRange = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
@@ -274,9 +289,15 @@ void VulkanCommandList::EndRenderPass()
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
         0, 0, nullptr, 0, nullptr, 1, &barrier);
-    impl_->frame->SetImageLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    if (Status status = impl_->swapchain->SetImageLayout(
+            *impl_->frame, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR); !status) {
+        impl_->Fail(status.error().code, status.error().message);
+        return;
+    }
 
-    impl_->frame = nullptr;
+    impl_->frame.reset();
+    impl_->swapchain = nullptr;
+    impl_->image_state = {};
     impl_->in_render_pass = false;
     impl_->pipeline_bound = false;
 }
@@ -306,10 +327,9 @@ void VulkanCommandList::BindPipeline(const Pipeline* pipeline)
     impl_->pipeline_bound = true;
 }
 
-void VulkanCommandList::BindVertexBuffer()
+void VulkanCommandList::BindVertexBuffer(Handle<Buffer> buffer)
 {
-    impl_->Fail(ErrorCode::Unsupported,
-        "Vulkan vertex buffer binding is not implemented yet");
+    
 }
 
 void VulkanCommandList::Draw(uint32_t vertex_count, uint32_t first_vertex)

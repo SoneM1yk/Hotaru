@@ -5,7 +5,6 @@
 #include <hotaru/result.h>
 
 #include <memory>
-
 #include <volk.h>
 
 namespace hotaru {
@@ -13,6 +12,7 @@ namespace hotaru {
 class VulkanContext;
 class Frame;
 struct RenderPassDesc;
+class VulkanSwapchain;
 
 class VulkanCommandList final : public CommandList
 {
@@ -30,10 +30,10 @@ public:
     void Begin() override;
     void End() override;
     void BeginRenderPass(
-        Frame* frame, const RenderPassDesc& desc) override;
+        const Frame& frame, const RenderPassDesc& desc) override;
     void EndRenderPass() override;
     void BindPipeline(const Pipeline* pipeline) override;
-    void BindVertexBuffer() override;
+    void BindVertexBuffer(Handle<Buffer> buffer) override;
     void Draw(uint32_t vertex_count, uint32_t first_vertex = 0) override;
 
     VkCommandBuffer* CommandBuffer();

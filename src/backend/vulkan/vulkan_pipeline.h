@@ -32,8 +32,10 @@ public:
 private:
     VulkanPipeline(std::shared_ptr<VulkanContext> context, PipelineKind kind);
 
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<VulkanContext> context_;
+    PipelineKind kind_;
+    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    VkPipelineLayout layout_ = VK_NULL_HANDLE;
 };
 
 } // namespace hotaru

@@ -6,6 +6,8 @@
 
 namespace hotaru {
 
+class Swapchain;
+
 enum class ColorFormat
 {
     UNDEFINED,
@@ -35,14 +37,11 @@ struct RenderPassDesc
     ClearColor clear_color{};
 };
 
-class Frame
+struct Frame final
 {
-public:
-    virtual ~Frame() = default;
-
-    virtual RenderBackend Backend() const noexcept = 0;
-    virtual const FrameDesc& Desc() const noexcept = 0;
-    virtual uint32_t ImageIndex() const noexcept = 0;
+    Swapchain* swapchain = nullptr;
+    uint32_t image_index = 0;
+    FrameDesc desc{};
 };
 
 } // namespace hotaru

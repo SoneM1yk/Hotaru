@@ -1,7 +1,8 @@
 #include "backend/pipeline.h"
+#include "backend/frame.h"
+#include "backend/program.h"
 #include "backend/vulkan/vulkan_context.h"
 #include "backend/vulkan/vulkan_driver.h"
-#include "backend/vulkan/vulkan_frame.h"
 #include "backend/vulkan/vulkan_pipeline.h"
 
 #include <gtest/gtest.h>
@@ -11,6 +12,7 @@
 #include <fstream>
 #include <memory>
 #include <span>
+#include <type_traits>
 #include <vector>
 
 namespace hotaru {
@@ -137,37 +139,29 @@ TEST(VulkanPipelineTest, CreatesGraphicsPipeline)
 }
 #endif
 
-TEST(VulkanFrameTest, ExposesDescAndImageLayout)
+TEST(FrameTest, ExposesSwapchainImageAndDesc)
 {
     const FrameDesc desc{
         .extent = {.width = 1280, .height = 720},
         .color_format = ColorFormat::RGBA8_SRGB,
     };
-    VulkanFrame frame;
-    frame.Initialize(VK_NULL_HANDLE, VK_NULL_HANDLE, desc, 1);
+    Frame frame{
+        .swapchain = nullptr,
+        .image_index = 1,
+        .desc = desc,
+    };
 
-    EXPECT_EQ(frame.Backend(), RenderBackend::VULKAN);
-    EXPECT_EQ(frame.Desc().extent.width, 1280u);
-    EXPECT_EQ(frame.Desc().extent.height, 720u);
-    EXPECT_EQ(frame.Desc().color_format, ColorFormat::RGBA8_SRGB);
-    EXPECT_EQ(frame.ImageIndex(), 1u);
-    EXPECT_EQ(frame.ImageLayout(), VK_IMAGE_LAYOUT_UNDEFINED);
-
-    frame.SetImageLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-    EXPECT_EQ(
-        frame.ImageLayout(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    EXPECT_EQ(frame.swapchain, nullptr);
+    EXPECT_EQ(frame.image_index, 1u);
+    EXPECT_EQ(frame.desc.extent.width, 1280u);
+    EXPECT_EQ(frame.desc.extent.height, 720u);
+    EXPECT_EQ(frame.desc.color_format, ColorFormat::RGBA8_SRGB);
 }
 
-TEST(VulkanFrameTest, KeepsSynchronizationHandles)
+TEST(FrameTest, IsANonPolymorphicValueType)
 {
-    VulkanFrame frame;
-    frame.SetSynchronization(
-        VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE);
-
-    EXPECT_EQ(frame.Backend(), RenderBackend::VULKAN);
-    EXPECT_EQ(frame.ImageAvailable(), VK_NULL_HANDLE);
-    EXPECT_EQ(frame.RenderFinished(), VK_NULL_HANDLE);
-    EXPECT_EQ(frame.InFlightFence(), VK_NULL_HANDLE);
+    static_assert(!std::is_polymorphic_v<Frame>);
+    static_assert(std::is_copy_constructible_v<Frame>);
 }
 
 } // namespace

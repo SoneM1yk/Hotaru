@@ -1,4 +1,5 @@
 #include "backend/driver.h"
+#include "backend/swapchain.h"
 
 #include "renderer.h"
 #include "view.h"

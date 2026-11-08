@@ -9,17 +9,8 @@
 
 namespace hotaru {
 
-struct ViewImpl::Impl
-{
-    explicit Impl(std::unique_ptr<Swapchain> swapchain)
-        : swapchain(std::move(swapchain))
-    {}
-
-    std::unique_ptr<Swapchain> swapchain;
-};
-
 ViewImpl::ViewImpl(std::unique_ptr<Swapchain> swapchain)
-    : impl_(std::make_unique<Impl>(std::move(swapchain)))
+    : swapchain_(std::move(swapchain))
 {}
 
 ViewImpl::~ViewImpl() = default;
@@ -31,12 +22,12 @@ Camera* ViewImpl::GetCamera() const
 
 Swapchain* ViewImpl::GetSwapchain() 
 {
-    return impl_->swapchain.get();
+    return swapchain_.get();
 }
 
 Status ViewImpl::Resize(const Extent& ext)
 {
-    return impl_->swapchain->Resize(ext);
+    return swapchain_->Resize(ext);
 }
 
 } // namespace hotaru

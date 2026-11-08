@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <span>
+#include <unordered_map>
 
 #include <volk.h>
 
@@ -34,8 +35,8 @@ public:
 private:
     explicit VulkanProgram(std::shared_ptr<VulkanContext> context);
 
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<VulkanContext> context_;
+    std::unordered_map<ShaderStage, VkShaderModule> shaders_;
 };
 
 } // namespace hotaru

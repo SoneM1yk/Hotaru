@@ -2,7 +2,6 @@
 
 #include "vulkan_context.h"
 #include "vulkan_command_list.h"
-#include "vulkan_frame.h"
 
 #include <hotaru/config.h>
 #include <hotaru/result.h>
@@ -10,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -88,7 +88,7 @@ struct VulkanSwapchain::Impl
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     std::vector<VkImage> images;
     std::vector<VkImageView> image_views;
-    std::vector<std::unique_ptr<VulkanFrame>> frames;
+    std::vector<VkImageLayout> image_layouts;
 
     VkSurfaceFormatKHR format{};
     VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
@@ -106,7 +106,8 @@ struct VulkanSwapchain::Impl
     std::vector<VkSemaphore> render_finished_sems;
     size_t current_frame = 0;
 
-    VulkanFrame* acquired_frame = nullptr;
+    std::optional<Frame> acquired_frame;
+    FrameSynchronization acquired_sync;
 };
 
 VulkanSwapchain::VulkanSwapchain(
@@ -318,23 +319,8 @@ Status VulkanSwapchain::Init()
         }
     }
 
-    impl_->frames.clear();
-    impl_->frames.reserve(impl_->images.size());
-    for (size_t index = 0; index < impl_->images.size(); ++index) {
-        auto frame = std::make_unique<VulkanFrame>();
-        frame->Initialize(
-            impl_->images[index], impl_->image_views[index],
-            FrameDesc{
-                .extent = {
-                    .width = impl_->extent.width,
-                    .height = impl_->extent.height,
-                },
-                .color_format = color_format,
-            },
-            static_cast<uint32_t>(index));
-        frame->SetImageLayout(VK_IMAGE_LAYOUT_UNDEFINED);
-        impl_->frames.push_back(std::move(frame));
-    }
+    impl_->image_layouts.assign(
+        impl_->images.size(), VK_IMAGE_LAYOUT_UNDEFINED);
 
     return {};
 }
@@ -477,9 +463,9 @@ Status VulkanSwapchain::Resize(const Extent& extent)
                    "Vulkan swapchain resizing is not implemented yet");
 }
 
-Result<Frame*> VulkanSwapchain::AcquireFrame()
+Result<Frame> VulkanSwapchain::AcquireFrame()
 {
-    if (impl_->acquired_frame != nullptr) {
+    if (impl_->acquired_frame.has_value()) {
         return Failure(ErrorCode::InvalidState,
                        "A frame is already acquired");
     }
@@ -513,24 +499,33 @@ Result<Frame*> VulkanSwapchain::AcquireFrame()
                        "Failed to reset the in-flight fence");
     }
 
-    impl_->acquired_frame = impl_->frames[image_index].get();
-    impl_->acquired_frame->SetSynchronization(
-        sync.image_available_sem,
-        impl_->render_finished_sems[image_index],
-        sync.in_flight_fence);
-    return impl_->acquired_frame;
+    impl_->acquired_sync = FrameSynchronization{
+        .image_available = sync.image_available_sem,
+        .render_finished = impl_->render_finished_sems[image_index],
+        .in_flight_fence = sync.in_flight_fence,
+    };
+    impl_->acquired_frame = Frame{
+        .swapchain = this,
+        .image_index = image_index,
+        .desc = {
+            .extent = {
+                .width = impl_->extent.width,
+                .height = impl_->extent.height,
+            },
+            .color_format = ToColorFormat(impl_->format.format),
+        },
+    };
+    return *impl_->acquired_frame;
 }
 
-Status VulkanSwapchain::Present(Frame& frame)
+Status VulkanSwapchain::Present(const Frame& frame)
 {
-    VulkanFrame* vk_frame = dynamic_cast<VulkanFrame*>(&frame);
-    if (vk_frame == nullptr || vk_frame != impl_->acquired_frame) {
-        return Failure(ErrorCode::InvalidArgument,
-                       "Frame does not belong to this swapchain");
+    if (Status status = ValidateFrame(frame); !status) {
+        return status;
     }
 
-    const VkSemaphore render_finished = vk_frame->RenderFinished();
-    const uint32_t image_index = vk_frame->ImageIndex();
+    const VkSemaphore render_finished = impl_->acquired_sync.render_finished;
+    const uint32_t image_index = frame.image_index;
     VkPresentInfoKHR present_info {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
@@ -542,7 +537,8 @@ Status VulkanSwapchain::Present(Frame& frame)
     };
     const VkResult result = vkQueuePresentKHR(
         impl_->context->GraphicsQueue(), &present_info);
-    impl_->acquired_frame = nullptr;
+    impl_->acquired_frame.reset();
+    impl_->acquired_sync = {};
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         return Failure(ErrorCode::RuntimeError,
             "Failed to present the frame!");
@@ -550,6 +546,59 @@ Status VulkanSwapchain::Present(Frame& frame)
     impl_->current_frame =
         (impl_->current_frame + 1) % Impl::kFramesInFlight;
     return {};
+}
+
+Status VulkanSwapchain::ValidateFrame(const Frame& frame) const
+{
+    if (frame.swapchain != this) {
+        return Failure(ErrorCode::InvalidArgument,
+                       "Frame does not belong to this swapchain");
+    }
+    if (!impl_->acquired_frame.has_value() ||
+        frame.image_index != impl_->acquired_frame->image_index) {
+        return Failure(ErrorCode::InvalidState,
+                       "Frame is not currently acquired");
+    }
+    if (frame.image_index >= impl_->images.size()) {
+        return Failure(ErrorCode::InvalidArgument,
+                       "Frame image index is out of range");
+    }
+    return {};
+}
+
+Result<VulkanSwapchain::ImageState> VulkanSwapchain::GetImageState(
+    const Frame& frame) const
+{
+    if (Status status = ValidateFrame(frame); !status) {
+        return std::unexpected(std::move(status.error()));
+    }
+
+    return ImageState{
+        .image = impl_->images[frame.image_index],
+        .view = impl_->image_views[frame.image_index],
+        .layout = impl_->image_layouts[frame.image_index],
+    };
+}
+
+Status VulkanSwapchain::SetImageLayout(
+    const Frame& frame, VkImageLayout layout)
+{
+    if (Status status = ValidateFrame(frame); !status) {
+        return status;
+    }
+
+    impl_->image_layouts[frame.image_index] = layout;
+    return {};
+}
+
+Result<VulkanSwapchain::FrameSynchronization>
+VulkanSwapchain::GetSynchronization(const Frame& frame) const
+{
+    if (Status status = ValidateFrame(frame); !status) {
+        return std::unexpected(std::move(status.error()));
+    }
+
+    return impl_->acquired_sync;
 }
 
 } // namespace hotaru

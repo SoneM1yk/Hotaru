@@ -31,33 +31,21 @@ VkFormat ToVkFormat(ColorFormat format) noexcept
 
 } // namespace
 
-struct VulkanPipeline::Impl
-{
-    Impl(std::shared_ptr<VulkanContext> context, PipelineKind kind)
-        : context(std::move(context))
-        , kind(kind)
-    {}
-
-    std::shared_ptr<VulkanContext> context;
-    PipelineKind kind;
-    VkPipeline pipeline = VK_NULL_HANDLE;
-    VkPipelineLayout layout = VK_NULL_HANDLE;
-};
-
 VulkanPipeline::VulkanPipeline(
     std::shared_ptr<VulkanContext> context,
     PipelineKind kind)
-    : impl_(std::make_unique<Impl>(std::move(context), kind))
+    : context_(std::move(context))
+    , kind_(kind)
 {}
 
 VulkanPipeline::~VulkanPipeline()
 {
-    if (impl_->pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(impl_->context->Device(), impl_->pipeline, nullptr);
+    if (pipeline_ != VK_NULL_HANDLE) {
+        vkDestroyPipeline(context_->Device(), pipeline_, nullptr);
     }
-    if (impl_->layout != VK_NULL_HANDLE) {
+    if (layout_ != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(
-            impl_->context->Device(), impl_->layout, nullptr);
+            context_->Device(), layout_, nullptr);
     }
 }
 
@@ -195,10 +183,10 @@ Result<std::unique_ptr<Pipeline>> VulkanPipeline::Create(
     };
 
     VkResult vk_result = vkCreatePipelineLayout(
-        pipeline->impl_->context->Device(), &layout_info, nullptr,
-        &pipeline->impl_->layout);
+        pipeline->context_->Device(), &layout_info, nullptr,
+        &pipeline->layout_);
     if (vk_result != VK_SUCCESS) {
-        pipeline->impl_->layout = VK_NULL_HANDLE;
+        pipeline->layout_ = VK_NULL_HANDLE;
         return Failure(ErrorCode::InitializationFailed,
                        "Failed to create Vulkan pipeline layout");
     }
@@ -226,20 +214,20 @@ Result<std::unique_ptr<Pipeline>> VulkanPipeline::Create(
         .pDepthStencilState = nullptr,
         .pColorBlendState = &color_blend_info,
         .pDynamicState = &dynamic_state_info,
-        .layout = pipeline->impl_->layout,
+        .layout = pipeline->layout_,
         .renderPass = VK_NULL_HANDLE,
         .subpass = 0,
     };
 
     vk_result = vkCreateGraphicsPipelines(
-        pipeline->impl_->context->Device(), VK_NULL_HANDLE, 1, &pipeline_info,
-        nullptr, &pipeline->impl_->pipeline);
+        pipeline->context_->Device(), VK_NULL_HANDLE, 1, &pipeline_info,
+        nullptr, &pipeline->pipeline_);
     if (vk_result != VK_SUCCESS) {
-        pipeline->impl_->pipeline = VK_NULL_HANDLE;
+        pipeline->pipeline_ = VK_NULL_HANDLE;
         vkDestroyPipelineLayout(
-            pipeline->impl_->context->Device(), pipeline->impl_->layout,
+            pipeline->context_->Device(), pipeline->layout_,
             nullptr);
-        pipeline->impl_->layout = VK_NULL_HANDLE;
+        pipeline->layout_ = VK_NULL_HANDLE;
         return Failure(ErrorCode::InitializationFailed,
                        "Failed to create Vulkan graphics pipeline");
     }
@@ -254,12 +242,12 @@ RenderBackend VulkanPipeline::Backend() const noexcept
 
 PipelineKind VulkanPipeline::Kind() const noexcept
 {
-    return impl_->kind;
+    return kind_;
 }
 
 VkPipeline VulkanPipeline::NativeHandle() const noexcept
 {
-    return impl_->pipeline;
+    return pipeline_;
 }
 
 } // namespace hotaru

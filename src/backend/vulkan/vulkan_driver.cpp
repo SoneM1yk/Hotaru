@@ -2,10 +2,11 @@
 
 #include "vulkan_command_list.h"
 #include "vulkan_context.h"
-#include "vulkan_frame.h"
 #include "vulkan_pipeline.h"
 #include "vulkan_program.h"
 #include "vulkan_swapchain.h"
+#include "vulkan_resource.h"
+#include "backend/resource.h"
 
 #include <hotaru/config.h>
 #include <hotaru/result.h>
@@ -14,17 +15,8 @@
 
 namespace hotaru {
 
-struct VulkanDriver::Impl
-{
-    explicit Impl(std::shared_ptr<VulkanContext> context)
-        : context(std::move(context))
-    {}
-
-    std::shared_ptr<VulkanContext> context;
-};
-
 VulkanDriver::VulkanDriver(std::shared_ptr<VulkanContext> context)
-    : impl_(std::make_unique<Impl>(std::move(context)))
+    : context_(std::move(context))
 {}
 
 VulkanDriver::~VulkanDriver() = default;
@@ -32,24 +24,37 @@ VulkanDriver::~VulkanDriver() = default;
 Result<std::unique_ptr<Swapchain>>
 VulkanDriver::CreateSwapchain(const NativeSurfaceDesc& desc)
 {
-    return VulkanSwapchain::Create(impl_->context, desc);
+    return VulkanSwapchain::Create(context_, desc);
 }
 
 Result<std::unique_ptr<Program>>
 VulkanDriver::CreateProgram()
 {
-    return VulkanProgram::Create(impl_->context);
+    return VulkanProgram::Create(context_);
 }
 
 Result<std::unique_ptr<Pipeline>>
 VulkanDriver::CreatePipeline(const PipelineDesc& desc)
 {
-    return VulkanPipeline::Create(impl_->context, desc);
+    return VulkanPipeline::Create(context_, desc);
 }
 
 Result<std::unique_ptr<CommandList>> VulkanDriver::CreateCommandList()
 {
-    return VulkanCommandList::Create(impl_->context);
+    return VulkanCommandList::Create(context_);
+}
+
+Result<std::unique_ptr<Buffer>> VulkanDriver::CreateBuffer(
+    const BufferDesc& desc)
+{
+    VkBufferCreateInfo buffer_info {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = desc.data.size(),
+        .usage = desc.usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+
+    std::unique_ptr<VulkanBuffer> 
 }
 
 Status VulkanDriver::Submit(CommandList* command_list)
@@ -57,12 +62,13 @@ Status VulkanDriver::Submit(CommandList* command_list)
     return Submit(command_list, nullptr);
 }
 
-Status VulkanDriver::Submit(CommandList* command_list, Frame& frame)
+Status VulkanDriver::Submit(
+    CommandList* command_list, const Frame& frame)
 {
     return Submit(command_list, &frame);
 }
 
-Status VulkanDriver::Submit(CommandList* command_list, Frame* frame)
+Status VulkanDriver::Submit(CommandList* command_list, const Frame* frame)
 {
     VulkanCommandList* vk_command_list =
         dynamic_cast<VulkanCommandList*>(command_list);
@@ -78,14 +84,19 @@ Status VulkanDriver::Submit(CommandList* command_list, Frame* frame)
     VkSemaphore signal_semaphore = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
     if (frame != nullptr) {
-        auto* vk_frame = dynamic_cast<VulkanFrame*>(frame);
-        if (vk_frame == nullptr) {
+        auto* swapchain = dynamic_cast<VulkanSwapchain*>(frame->swapchain);
+        if (swapchain == nullptr) {
             return Failure(ErrorCode::InvalidArgument,
                 "Frame belongs to a different backend!");
         }
-        wait_semaphore = vk_frame->ImageAvailable();
-        signal_semaphore = vk_frame->RenderFinished();
-        fence = vk_frame->InFlightFence();
+
+        auto synchronization = swapchain->GetSynchronization(*frame);
+        if (!synchronization) {
+            return Failure(synchronization.error());
+        }
+        wait_semaphore = synchronization->image_available;
+        signal_semaphore = synchronization->render_finished;
+        fence = synchronization->in_flight_fence;
     }
 
     const VkPipelineStageFlags wait_stages =
@@ -105,7 +116,7 @@ Status VulkanDriver::Submit(CommandList* command_list, Frame* frame)
             ? &signal_semaphore : nullptr,
     };
 
-    if (vkQueueSubmit(impl_->context->GraphicsQueue(), 1, &submit_info,
+    if (vkQueueSubmit(context_->GraphicsQueue(), 1, &submit_info,
             fence) != VK_SUCCESS) {
         return Failure(ErrorCode::RuntimeError,
             "Failed to submit commands!");
@@ -116,7 +127,7 @@ Status VulkanDriver::Submit(CommandList* command_list, Frame* frame)
 
 Status VulkanDriver::WaitIdle()
 {
-    if (vkQueueWaitIdle(impl_->context->GraphicsQueue()) != VK_SUCCESS) {
+    if (vkQueueWaitIdle(context_->GraphicsQueue()) != VK_SUCCESS) {
         return Failure(ErrorCode::RuntimeError,
             "Failed to wait for the graphics queue!");
     }

@@ -32,15 +32,18 @@ public:
     Result<std::unique_ptr<CommandList>> 
     CreateCommandList() override;
 
+    Result<std::unique_ptr<Buffer>>
+    CreateBuffer(const BufferDesc& desc) override;
+
     Status Submit(CommandList* command_list) override;
-    Status Submit(CommandList* command_list, Frame& frame) override;
+    Status Submit(
+        CommandList* command_list, const Frame& frame) override;
     Status WaitIdle() override;
 
 private:
-    Status Submit(CommandList* command_list, Frame* frame);
+    Status Submit(CommandList* command_list, const Frame* frame);
 
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<VulkanContext> context_;
 };
 
 } // namespace hotaru

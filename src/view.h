@@ -21,8 +21,7 @@ public:
     Status Resize(const Extent& ext) override;
 
 private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    std::unique_ptr<Swapchain> swapchain_;
 };
 
 }
